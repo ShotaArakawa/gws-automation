@@ -1,0 +1,6 @@
+node_modules/
+dist/
+coverage/
+# clasp: scriptId differs per installation, credentials must never be committed
+.clasp.json
+.clasprc.json
