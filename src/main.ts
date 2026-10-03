@@ -6,15 +6,53 @@
  * declarations so they also appear in the Apps Script editor.
  */
 import { createGasDocumentService } from "./adapters/document";
-import { toLocalDateTime, toResponseData } from "./adapters/form";
-import { createGasLogWriter } from "./adapters/log-sheet";
+import { createGasFormService, toLocalDateTime, toResponseData } from "./adapters/form";
+import { createGasLogSheet } from "./adapters/log-sheet";
 import { createGasMailer } from "./adapters/mail";
 import { createGasStateStore } from "./adapters/properties";
-import { createGasSheetReader } from "./adapters/spreadsheet";
+import { createGasSheets } from "./adapters/spreadsheet";
+import { createGasUi } from "./adapters/ui";
+import {
+  type ActionDeps,
+  FORM_SUBMIT_HANDLER,
+  runRetryFailed,
+  runSetup,
+  runTestSend,
+} from "./core/actions";
 import { type ProcessDeps, processResponse } from "./core/process";
 import { loadSettings } from "./core/settings";
 
-const FORM_SUBMIT_HANDLER = "onFormSubmit";
+export const MENU_TITLE = "書類の自動送信";
+
+/** Simple trigger: adds the custom menu when the spreadsheet is opened. */
+function onOpen(): void {
+  SpreadsheetApp.getUi()
+    .createMenu(MENU_TITLE)
+    .addItem("初期設定", "menuSetup")
+    .addItem("テスト送信", "menuTestSend")
+    .addItem("失敗分を再送", "menuRetryFailed")
+    .addToUi();
+}
+
+function menuSetup(): void {
+  runSetup(createActionDeps());
+}
+
+function menuTestSend(): void {
+  runTestSend(createActionDeps());
+}
+
+function menuRetryFailed(): void {
+  runRetryFailed(createActionDeps());
+}
+
+/** Installable trigger handler for the linked form. */
+function onFormSubmit(e: GoogleAppsScript.Events.FormsOnFormSubmit): void {
+  const response = toResponseData(e.source, e.response);
+  const outcome = processResponse(response, createProcessDeps());
+  // Only the response ID is logged: answers and addresses are personal data.
+  console.log(`${outcome.ok ? "Processed" : "Failed to process"} response ${response.responseId}`);
+}
 
 /** Run from the Apps Script editor to confirm that `pnpm push` updated the script. */
 function healthCheck(): string {
@@ -23,48 +61,44 @@ function healthCheck(): string {
   return message;
 }
 
-/** Installable trigger handler for the linked form. */
-function onFormSubmit(e: GoogleAppsScript.Events.FormsOnFormSubmit): void {
-  const response = toResponseData(e.source, e.response);
-  const outcome = processResponse(response, createGasDeps());
-  // Only the response ID is logged: answers and addresses are personal data.
-  console.log(`${outcome.ok ? "Processed" : "Failed to process"} response ${response.responseId}`);
-}
-
-/**
- * Creates the form-submit trigger for the form linked to this spreadsheet. Replaces an
- * existing one, so running it twice does not send documents twice.
- */
+/** Same as the 「初期設定」 trigger step, for running from the Apps Script editor. */
 function setupFormTrigger(): string {
-  const formUrl = SpreadsheetApp.getActiveSpreadsheet().getFormUrl();
-  if (formUrl === null) {
-    throw new Error(
-      "このスプレッドシートにリンクされたフォームがありません。フォームの「回答」タブで「スプレッドシートにリンク」から、このスプレッドシートを選んでください",
-    );
-  }
-  for (const trigger of ScriptApp.getProjectTriggers()) {
-    if (trigger.getHandlerFunction() === FORM_SUBMIT_HANDLER) ScriptApp.deleteTrigger(trigger);
-  }
-  ScriptApp.newTrigger(FORM_SUBMIT_HANDLER)
-    .forForm(FormApp.openByUrl(formUrl))
-    .onFormSubmit()
-    .create();
+  createGasFormService().installSubmitTrigger(FORM_SUBMIT_HANDLER);
   const message = "フォーム送信時の自動処理を設定しました";
   console.log(message);
   return message;
 }
 
-function createGasDeps(): ProcessDeps {
+function createProcessDeps(): ProcessDeps {
+  const sheets = createGasSheets();
   return {
-    loadSettings: () => loadSettings(createGasSheetReader()),
+    loadSettings: () => loadSettings(sheets),
     documents: createGasDocumentService(),
     mailer: createGasMailer(),
-    log: createGasLogWriter(),
+    log: createGasLogSheet(),
     state: createGasStateStore(),
     now: () => toLocalDateTime(new Date()),
   };
 }
 
-export const gasEntries = { healthCheck, onFormSubmit, setupFormTrigger };
+function createActionDeps(): ActionDeps {
+  return {
+    ...createProcessDeps(),
+    log: createGasLogSheet(),
+    sheets: createGasSheets(),
+    forms: createGasFormService(),
+    ui: createGasUi(),
+  };
+}
+
+export const gasEntries = {
+  onOpen,
+  menuSetup,
+  menuTestSend,
+  menuRetryFailed,
+  onFormSubmit,
+  healthCheck,
+  setupFormTrigger,
+};
 
 Object.assign(globalThis, gasEntries);

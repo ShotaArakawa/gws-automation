@@ -11,6 +11,51 @@ export interface ResponseData {
   submittedAt: LocalDateTime;
 }
 
+/** The form linked to this spreadsheet. Methods throw a user-facing error when none is linked. */
+export interface FormService {
+  latestResponse(): ResponseData | undefined;
+  /** Undefined when the response no longer exists (e.g. deleted from the form). */
+  responseById(responseId: string): ResponseData | undefined;
+  /** (Re)creates the form-submit trigger that calls `handlerName`. */
+  installSubmitTrigger(handlerName: string): void;
+}
+
+export const NO_LINKED_FORM_MESSAGE =
+  "このスプレッドシートにリンクされたフォームがありません。フォームの「回答」タブで「スプレッドシートにリンク」から、このスプレッドシートを選んでください";
+
+export function createGasFormService(
+  spreadsheet: GoogleAppsScript.Spreadsheet.Spreadsheet = SpreadsheetApp.getActiveSpreadsheet(),
+): FormService {
+  const linkedForm = () => {
+    const url = spreadsheet.getFormUrl();
+    if (url === null) throw new Error(NO_LINKED_FORM_MESSAGE);
+    return FormApp.openByUrl(url);
+  };
+  return {
+    latestResponse() {
+      const form = linkedForm();
+      const responses = form.getResponses();
+      const latest = responses[responses.length - 1];
+      return latest === undefined ? undefined : toResponseData(form, latest);
+    },
+    responseById(responseId) {
+      const form = linkedForm();
+      try {
+        return toResponseData(form, form.getResponse(responseId));
+      } catch {
+        return undefined;
+      }
+    },
+    installSubmitTrigger(handlerName) {
+      const form = linkedForm();
+      for (const trigger of ScriptApp.getProjectTriggers()) {
+        if (trigger.getHandlerFunction() === handlerName) ScriptApp.deleteTrigger(trigger);
+      }
+      ScriptApp.newTrigger(handlerName).forForm(form).onFormSubmit().create();
+    },
+  };
+}
+
 // Compared by name so that this module can load without the FormApp global.
 const NON_QUESTION_TYPES = new Set(["PAGE_BREAK", "SECTION_HEADER", "IMAGE", "VIDEO"]);
 

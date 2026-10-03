@@ -29,19 +29,63 @@ interface ItemSpec {
   key: Key;
   label: string;
   required: boolean;
+  /** Shown in column C of a newly created settings sheet. */
+  description: string;
 }
 
 const ITEMS: readonly ItemSpec[] = [
-  { key: "templateDocId", label: "テンプレートのドキュメントID", required: true },
-  { key: "outputFolderId", label: "保存先フォルダID", required: true },
-  { key: "fileNameTemplate", label: "ファイル名テンプレート", required: true },
-  { key: "emailFieldName", label: "回答者のメールアドレスの項目名", required: false },
-  { key: "subjectTemplate", label: "件名テンプレート", required: true },
-  { key: "bodyTemplate", label: "本文テンプレート", required: true },
-  { key: "staffEmails", label: "担当者のメールアドレス", required: false },
+  {
+    key: "templateDocId",
+    label: "テンプレートのドキュメントID",
+    required: true,
+    description: "【必須】書類のひな形の Google ドキュメント。URL をそのまま貼っても構いません",
+  },
+  {
+    key: "outputFolderId",
+    label: "保存先フォルダID",
+    required: true,
+    description:
+      "【必須】PDF を保存する Google ドライブのフォルダ。URL をそのまま貼っても構いません",
+  },
+  {
+    key: "fileNameTemplate",
+    label: "ファイル名テンプレート",
+    required: true,
+    description: "【必須】例：見積書_{{会社名}}_{{今日:date(yyyyMMdd)}}",
+  },
+  {
+    key: "emailFieldName",
+    label: "回答者のメールアドレスの項目名",
+    required: false,
+    description:
+      "メールアドレスを聞く質問のタイトル。空欄の場合は、フォームの「メールアドレスを収集する」で集めたアドレスを使います",
+  },
+  {
+    key: "subjectTemplate",
+    label: "件名テンプレート",
+    required: true,
+    description: "【必須】例：{{お名前}} 様 お見積書を送付します",
+  },
+  {
+    key: "bodyTemplate",
+    label: "本文テンプレート",
+    required: true,
+    description: "【必須】メール本文。セル内の改行は Alt+Enter（Mac は ⌘+Enter）",
+  },
+  {
+    key: "staffEmails",
+    label: "担当者のメールアドレス",
+    required: false,
+    description: "送信の通知とエラーを受け取るアドレス。複数ある場合は「,」で区切ります",
+  },
 ];
 
 const HEADER_LABEL = "項目";
+
+/** Rows for a new, empty settings sheet: header, then one row per item. */
+export function settingsSheetTemplate(): string[][] {
+  return [[HEADER_LABEL, "値", "説明"], ...ITEMS.map((item) => [item.label, "", item.description])];
+}
 
 export function loadSettings(reader: SheetReader): Result<Settings> {
   const rows = reader.readSheet(SETTINGS_SHEET_NAME);

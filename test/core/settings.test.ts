@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { SheetReader } from "../../src/adapters/spreadsheet";
-import { extractGoogleId, loadSettings, parseSettings } from "../../src/core/settings";
+import {
+  extractGoogleId,
+  loadSettings,
+  parseSettings,
+  settingsSheetTemplate,
+} from "../../src/core/settings";
 
 const DOC_ID = "1AbCdEfGhIjKlMnOpQrStUvWxYz0123456789";
 const FOLDER_ID = "1XyZ_abc-DEF0123456789";
@@ -121,6 +126,23 @@ describe("parseSettings", () => {
     expect(parseSettings(rows)).toMatchObject({
       ok: false,
       errors: [expect.stringContaining("6行目")],
+    });
+  });
+});
+
+describe("settingsSheetTemplate", () => {
+  it("lists every item with an empty value, and reports the required ones as missing", () => {
+    const rows = settingsSheetTemplate();
+    expect(rows[0]).toEqual(["項目", "値", "説明"]);
+    expect(rows.map((row) => row[0]).slice(1)).toEqual(
+      validRows()
+        .map((row) => row[0])
+        .slice(1),
+    );
+    expect(rows.slice(1).every((row) => row[1] === "" && row[2] !== "")).toBe(true);
+    expect(parseSettings(rows)).toMatchObject({
+      ok: false,
+      errors: expect.arrayContaining(["「テンプレートのドキュメントID」が入力されていません"]),
     });
   });
 });

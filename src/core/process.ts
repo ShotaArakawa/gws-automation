@@ -40,7 +40,7 @@ export function processResponse(response: ResponseData, deps: ProcessDeps): Proc
     : {
         ok: false,
         respondent: response.respondentEmail,
-        errors: settings.errors.map((e) => `設定シート：${e}`),
+        errors: settingsErrors(settings.errors),
       };
   const staff = settings.ok ? settings.value.staffEmails : [];
 
@@ -67,11 +67,33 @@ export function processResponse(response: ResponseData, deps: ProcessDeps): Proc
   return outcome;
 }
 
+/**
+ * Test send from the menu: creates the document for one response and emails it only to
+ * `testRecipient`, marked as a test. Nothing is logged and staff are not notified.
+ */
+export function processTestResponse(
+  response: ResponseData,
+  deps: ProcessDeps,
+  testRecipient: string,
+): ProcessOutcome {
+  const settings = deps.loadSettings();
+  if (!settings.ok) {
+    return {
+      ok: false,
+      respondent: response.respondentEmail,
+      errors: settingsErrors(settings.errors),
+    };
+  }
+  return generateAndSend(response, settings.value, deps, testRecipient);
+}
+
 function generateAndSend(
   response: ResponseData,
   settings: Settings,
   deps: ProcessDeps,
+  testRecipient?: string,
 ): ProcessOutcome {
+  const isTest = testRecipient !== undefined;
   const fields = buildFields({
     answers: response.answers,
     today: deps.now(),
@@ -112,7 +134,7 @@ function generateAndSend(
       deps.documents.createPdf({
         templateDocId: settings.templateDocId,
         folderId: settings.outputFolderId,
-        fileName: fileName.value,
+        fileName: isTest ? `テスト_${fileName.value}` : fileName.value,
         replacements: replacements.value,
       }),
     "PDFの作成に失敗しました。保存先フォルダIDと、このアカウントに編集権限があるかを確認してください",
@@ -122,9 +144,11 @@ function generateAndSend(
   const sent = attempt(
     () =>
       deps.mailer.send({
-        to: [recipient.value],
-        subject: subject.value.replace(/\s*\n\s*/g, " "),
-        body: body.value,
+        to: [testRecipient ?? recipient.value],
+        subject: `${isTest ? "【テスト】" : ""}${subject.value.replace(/\s*\n\s*/g, " ")}`,
+        body: isTest
+          ? `※ テスト送信です。本番では ${recipient.value} 宛に送信されます。\n\n${body.value}`
+          : body.value,
         attachmentFileIds: [pdf.value.id],
       }),
     "回答者へのメール送信に失敗しました",
@@ -221,6 +245,10 @@ function attempt<T>(fn: () => T, message: string): Result<T> {
     const detail = error instanceof Error ? error.message : String(error);
     return fail(`${message}（詳細：${detail}）`);
   }
+}
+
+function settingsErrors(errors: readonly string[]): string[] {
+  return errors.map((e) => `設定シート：${e}`);
 }
 
 function errorsOf(result: Result<unknown>, label: string): string[] {
