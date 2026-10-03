@@ -60,6 +60,16 @@ function replacePlaceholders(section: Section, replacements: ReadonlyMap<string,
 export function createGasDocumentService(): DocumentService {
   return {
     readTemplateText(templateDocId) {
+      // DocumentApp only says "Invalid argument" for files that are not Google Docs.
+      const mimeType = DriveApp.getFileById(templateDocId).getMimeType();
+      if (mimeType === MimeType.MICROSOFT_WORD) {
+        throw new Error(
+          "Word 形式（.docx）のファイルです。ドキュメントを開き「ファイル」→「Google ドキュメントとして保存」で作られた新しいドキュメントの URL を設定してください",
+        );
+      }
+      if (mimeType !== MimeType.GOOGLE_DOCS) {
+        throw new Error(`Google ドキュメントではありません（ファイルの種類：${mimeType}）`);
+      }
       return sectionsOf(DocumentApp.openById(templateDocId))
         .map((section) => section.getText())
         .join("\n");
