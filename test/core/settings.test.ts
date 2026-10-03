@@ -42,6 +42,11 @@ describe("parseSettings", () => {
     expect(parseSettings(rows).ok).toBe(true);
   });
 
+  it("leaves the respondent email item empty to use the address collected by the form", () => {
+    const rows = validRows().filter((row) => row[0] !== "回答者のメールアドレスの項目名");
+    expect(parseSettings(rows)).toMatchObject({ ok: true, value: { emailFieldName: "" } });
+  });
+
   it("extracts IDs from pasted URLs", () => {
     let rows = replaceValue(
       validRows(),

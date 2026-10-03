@@ -35,7 +35,9 @@ export function buildFields(params: {
 
 type Format = { kind: "yen" } | { kind: "number" } | { kind: "date"; pattern: string };
 
-const PLACEHOLDER = /\{\{([^{}]*)\}\}/g;
+/** Placeholder pattern as a source string, also usable with Google Docs' findText (RE2). */
+export const PLACEHOLDER_SOURCE = "\\{\\{[^{}]*\\}\\}";
+const PLACEHOLDER = new RegExp(PLACEHOLDER_SOURCE, "g");
 const KNOWN_FORMAT = /^(.*?):\s*(yen|number|date\((.*)\))\s*$/s;
 const FORMAT_LIKE = /^(.*?):\s*([A-Za-z]+(?:\(.*\))?)\s*$/s;
 const FORMAT_HELP = "使える書式は yen・number・date(yyyy/MM/dd) です";
@@ -88,6 +90,19 @@ export function resolvePlaceholder(placeholder: string, fields: FieldMap): Resul
 
 /** Replaces every placeholder in the text. Reports all problems at once. */
 export function renderTemplate(text: string, fields: FieldMap): Result<string> {
+  const resolved = resolvePlaceholders(text, fields);
+  if (!resolved.ok) return resolved;
+  return ok(text.replace(PLACEHOLDER, (placeholder) => resolved.value.get(placeholder) ?? ""));
+}
+
+/**
+ * Maps every placeholder in the text to its replacement, e.g. "{{合計金額:yen}}" → "¥12,000".
+ * Used where the text cannot be rewritten as a string, such as a Google Document.
+ */
+export function resolvePlaceholders(
+  text: string,
+  fields: FieldMap,
+): Result<ReadonlyMap<string, string>> {
   const syntaxErrors = checkTemplateSyntax(text);
   if (syntaxErrors.length > 0) return fail(...syntaxErrors);
 
@@ -98,8 +113,7 @@ export function renderTemplate(text: string, fields: FieldMap): Result<string> {
     if (result.ok) resolved.set(placeholder, result.value);
     else errors.push(...result.errors);
   }
-  if (errors.length > 0) return fail(...errors);
-  return ok(text.replace(PLACEHOLDER, (placeholder) => resolved.get(placeholder) ?? ""));
+  return errors.length > 0 ? fail(...errors) : ok(resolved);
 }
 
 function parseFormat(match: RegExpExecArray): Format {

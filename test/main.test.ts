@@ -4,6 +4,7 @@ import { gasEntries } from "../src/main";
 describe("main", () => {
   it("exposes every GAS entry point on globalThis", () => {
     const g = globalThis as Record<string, unknown>;
+    expect(Object.keys(gasEntries)).toEqual(["healthCheck", "onFormSubmit", "setupFormTrigger"]);
     for (const [name, fn] of Object.entries(gasEntries)) {
       expect(g[name]).toBe(fn);
     }

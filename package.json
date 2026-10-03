@@ -12,7 +12,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build",
-    "push": "pnpm build && clasp push"
+    "push": "pnpm build && clasp push --force"
   },
   "devEngines": {
     "packageManager": {

@@ -15,6 +15,7 @@ export interface Settings {
   templateDocId: string;
   outputFolderId: string;
   fileNameTemplate: string;
+  /** Question holding the respondent's address. Empty: use the address collected by the form. */
   emailFieldName: string;
   subjectTemplate: string;
   bodyTemplate: string;
@@ -34,7 +35,7 @@ const ITEMS: readonly ItemSpec[] = [
   { key: "templateDocId", label: "テンプレートのドキュメントID", required: true },
   { key: "outputFolderId", label: "保存先フォルダID", required: true },
   { key: "fileNameTemplate", label: "ファイル名テンプレート", required: true },
-  { key: "emailFieldName", label: "回答者のメールアドレスの項目名", required: true },
+  { key: "emailFieldName", label: "回答者のメールアドレスの項目名", required: false },
   { key: "subjectTemplate", label: "件名テンプレート", required: true },
   { key: "bodyTemplate", label: "本文テンプレート", required: true },
   { key: "staffEmails", label: "担当者のメールアドレス", required: false },
