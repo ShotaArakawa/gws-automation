@@ -4,16 +4,19 @@
  */
 import type { FormService } from "../adapters/form";
 import type { LogSheet } from "../adapters/log-sheet";
+import type { SampleBuilder } from "../adapters/sample-builder";
 import type { SheetReader, SheetWriter } from "../adapters/spreadsheet";
 import type { Ui } from "../adapters/ui";
 import { type ProcessDeps, processResponse, processTestResponse } from "./process";
 import { selectRetryTargets } from "./retry";
+import { findSample, type SampleId } from "./samples";
 import { SETTINGS_SHEET_NAME, settingsSheetTemplate } from "./settings";
 
 export interface ActionDeps extends ProcessDeps {
   log: LogSheet;
   sheets: SheetReader & SheetWriter;
   forms: FormService;
+  samples: SampleBuilder;
   ui: Ui;
 }
 
@@ -24,7 +27,7 @@ export const MAX_RETRIES_PER_RUN = 20;
 
 export function runSetup(deps: ActionDeps): void {
   if (deps.sheets.readSheet(SETTINGS_SHEET_NAME) === undefined) {
-    deps.sheets.createSheet(SETTINGS_SHEET_NAME, settingsSheetTemplate());
+    deps.sheets.writeSheet(SETTINGS_SHEET_NAME, settingsSheetTemplate());
     deps.ui.alert(
       "「設定」シートを作成しました",
       "B列に値を入力してから、もう一度メニューの「初期設定」を実行してください。\n各項目の説明はC列にあります。",
@@ -138,6 +141,84 @@ export function runRetryFailed(deps: ActionDeps): void {
     ]
       .filter((line) => line !== "")
       .join("\n"),
+  );
+}
+
+/**
+ * Creates a ready-to-try use case: form, document template, output folder and settings,
+ * then enables the trigger. Refuses when a form is already linked, because the
+ * spreadsheet can only serve one form.
+ */
+export function runCreateSample(deps: ActionDeps, sampleId: SampleId): void {
+  const sample = findSample(sampleId);
+  if (deps.forms.isLinked()) {
+    deps.ui.alert(
+      "サンプルを作成できません",
+      [
+        "このスプレッドシートには、すでにフォームがリンクされています。",
+        "",
+        "サンプルは、フォームがリンクされていないスプレッドシートで作成してください。",
+        "今のフォームを使わない場合は、メニューの「フォーム」→「フォームのリンクを解除」でリンクを外してから、もう一度実行してください。",
+      ].join("\n"),
+    );
+    return;
+  }
+
+  const currentSettings = deps.sheets.readSheet(SETTINGS_SHEET_NAME) ?? [];
+  const hasSettings = currentSettings
+    .slice(1)
+    .some((row) => row[1] !== undefined && row[1] !== null && String(row[1]).trim() !== "");
+  const confirmed = deps.ui.confirm(
+    `「${sample.label}」のサンプルを作成します`,
+    [
+      "次のものを自動で作成し、すぐに試せる状態にします。",
+      "・フォーム（このスプレッドシートにリンクします）",
+      "・書類のテンプレート（Google ドキュメント）",
+      "・PDF の保存先フォルダ",
+      hasSettings ? "・「設定」シートの内容（今の設定は上書きされます）" : "・「設定」シート",
+      "",
+      "よろしいですか？",
+    ].join("\n"),
+  );
+  if (!confirmed) return;
+
+  let created: ReturnType<SampleBuilder["build"]>;
+  try {
+    created = deps.samples.build(sample);
+  } catch (error) {
+    deps.ui.alert("サンプルを作成できませんでした", messageOf(error));
+    return;
+  }
+  deps.sheets.writeSheet(
+    SETTINGS_SHEET_NAME,
+    settingsSheetTemplate({
+      templateDocId: created.templateDocUrl,
+      outputFolderId: created.outputFolderUrl,
+      ...sample.settings,
+    }),
+  );
+  try {
+    deps.forms.installSubmitTrigger(FORM_SUBMIT_HANDLER, created.formEditUrl);
+  } catch (error) {
+    deps.ui.alert(
+      "サンプルは作成しましたが、自動処理を有効にできませんでした",
+      `${messageOf(error)}\n\nメニューの「初期設定」をもう一度実行してください。`,
+    );
+    return;
+  }
+
+  deps.ui.alert(
+    "サンプルを作成しました",
+    [
+      `このスプレッドシートと同じ場所の「${created.folderName}」フォルダに、フォームと書類のテンプレートを作成しました。`,
+      "",
+      "試し方：",
+      "1. メニューの「フォーム」→「ライブフォームに移動」でフォームを開く",
+      "2. 自分のメールアドレスを入力して送信する",
+      "3. 届いたメールと、「PDF」フォルダの書類を確認する",
+      "",
+      "書類のテンプレートやメール本文の「サンプル」となっている会社名・連絡先は、自社の情報に書き換えてください。",
+    ].join("\n"),
   );
 }
 

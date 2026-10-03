@@ -25,6 +25,9 @@ export interface Settings {
 
 type Key = keyof Settings;
 
+/** Text values of the settings sheet, by item; omitted items are left empty. */
+export type SettingsValues = Partial<Record<Key, string>>;
+
 interface ItemSpec {
   key: Key;
   label: string;
@@ -82,9 +85,12 @@ const ITEMS: readonly ItemSpec[] = [
 
 const HEADER_LABEL = "項目";
 
-/** Rows for a new, empty settings sheet: header, then one row per item. */
-export function settingsSheetTemplate(): string[][] {
-  return [[HEADER_LABEL, "値", "説明"], ...ITEMS.map((item) => [item.label, "", item.description])];
+/** Rows for a settings sheet: header, then one row per item with the given values. */
+export function settingsSheetTemplate(values: SettingsValues = {}): string[][] {
+  return [
+    [HEADER_LABEL, "値", "説明"],
+    ...ITEMS.map((item) => [item.label, values[item.key] ?? "", item.description]),
+  ];
 }
 
 export function loadSettings(reader: SheetReader): Result<Settings> {

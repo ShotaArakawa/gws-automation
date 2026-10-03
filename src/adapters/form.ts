@@ -16,8 +16,9 @@ export interface FormService {
   latestResponse(): ResponseData | undefined;
   /** Undefined when the response no longer exists (e.g. deleted from the form). */
   responseById(responseId: string): ResponseData | undefined;
-  /** (Re)creates the form-submit trigger that calls `handlerName`. */
-  installSubmitTrigger(handlerName: string): void;
+  /** (Re)creates the form-submit trigger that calls `handlerName`, for the linked form by default. */
+  installSubmitTrigger(handlerName: string, formUrl?: string): void;
+  isLinked(): boolean;
 }
 
 export const NO_LINKED_FORM_MESSAGE =
@@ -46,8 +47,9 @@ export function createGasFormService(
         return undefined;
       }
     },
-    installSubmitTrigger(handlerName) {
-      const form = linkedForm();
+    isLinked: () => spreadsheet.getFormUrl() !== null,
+    installSubmitTrigger(handlerName, formUrl) {
+      const form = formUrl === undefined ? linkedForm() : FormApp.openByUrl(formUrl);
       for (const trigger of ScriptApp.getProjectTriggers()) {
         if (trigger.getHandlerFunction() === handlerName) ScriptApp.deleteTrigger(trigger);
       }

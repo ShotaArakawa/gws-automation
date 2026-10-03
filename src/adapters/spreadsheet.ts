@@ -5,8 +5,11 @@ export interface SheetReader {
 }
 
 export interface SheetWriter {
-  /** Adds a sheet filled with the rows; the first row is formatted as a header. */
-  createSheet(name: string, rows: readonly (readonly string[])[]): void;
+  /**
+   * Replaces the sheet's contents with the rows (creating the sheet if needed) and shows it.
+   * The first row is formatted as a header.
+   */
+  writeSheet(name: string, rows: readonly (readonly string[])[]): void;
 }
 
 export function createGasSheets(
@@ -16,8 +19,9 @@ export function createGasSheets(
     readSheet(name) {
       return spreadsheet.getSheetByName(name)?.getDataRange().getValues();
     },
-    createSheet(name, rows) {
-      const sheet = spreadsheet.insertSheet(name);
+    writeSheet(name, rows) {
+      const sheet = spreadsheet.getSheetByName(name) ?? spreadsheet.insertSheet(name);
+      sheet.clear();
       const width = Math.max(...rows.map((row) => row.length));
       const values = rows.map((row) => [...row, ...Array<string>(width - row.length).fill("")]);
       sheet.getRange(1, 1, values.length, width).setValues(values).setVerticalAlignment("top");

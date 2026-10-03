@@ -5,6 +5,7 @@ import type { MailMessage } from "../../src/adapters/mail";
 import {
   type ActionDeps,
   MAX_RETRIES_PER_RUN,
+  runCreateSample,
   runRetryFailed,
   runSetup,
   runTestSend,
@@ -44,7 +45,13 @@ const response = (responseId: string, email = "taro@example.com"): ResponseData 
 });
 
 function setup(
-  options: { settingsSheet?: boolean; responses?: ResponseData[]; logRows?: LogRow[] } = {},
+  options: {
+    settingsSheet?: boolean;
+    settingsRows?: unknown[][];
+    responses?: ResponseData[];
+    logRows?: LogRow[];
+    linked?: boolean;
+  } = {},
 ) {
   const alerts: { title: string; message: string }[] = [];
   const sent: MailMessage[] = [];
@@ -74,13 +81,23 @@ function setup(
     state: { get: () => undefined, set: () => {} },
     now: () => now,
     sheets: {
-      readSheet: () => (options.settingsSheet === false ? undefined : []),
-      createSheet: vi.fn(),
+      readSheet: () => (options.settingsSheet === false ? undefined : (options.settingsRows ?? [])),
+      writeSheet: vi.fn(),
     },
     forms: {
       latestResponse: () => responses[responses.length - 1],
       responseById: (id) => responses.find((r) => r.responseId === id),
       installSubmitTrigger: vi.fn(),
+      isLinked: () => options.linked ?? true,
+    },
+    samples: {
+      build: vi.fn((sample) => ({
+        folderName: `${sample.label}サンプル`,
+        templateDocUrl: "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit",
+        outputFolderUrl: "https://drive.google.com/drive/folders/1XyZ_abc-DEF0123456789",
+        formEditUrl: "https://docs.google.com/forms/d/form-id/edit",
+        formPublishedUrl: "https://docs.google.com/forms/d/e/form-id/viewform",
+      })),
     },
     ui: {
       alert: (title, message) => alerts.push({ title, message }),
@@ -94,7 +111,7 @@ describe("runSetup", () => {
   it("creates the settings sheet when it is missing and stops there", () => {
     const { deps, alerts } = setup({ settingsSheet: false });
     runSetup(deps);
-    expect(deps.sheets.createSheet).toHaveBeenCalledWith(
+    expect(deps.sheets.writeSheet).toHaveBeenCalledWith(
       "設定",
       expect.arrayContaining([["項目", "値", "説明"]]),
     );
@@ -224,5 +241,69 @@ describe("runRetryFailed", () => {
 
     expect(appended).toHaveLength(MAX_RETRIES_PER_RUN);
     expect(alerts[0]?.message).toContain("未処理の失敗が 3 件あります");
+  });
+});
+
+describe("runCreateSample", () => {
+  it("builds the sample, fills the settings sheet and installs the trigger for the new form", () => {
+    const { deps, alerts } = setup({ linked: false });
+
+    runCreateSample(deps, "estimate");
+
+    expect(deps.samples.build).toHaveBeenCalledWith(expect.objectContaining({ id: "estimate" }));
+    const rows = vi.mocked(deps.sheets.writeSheet).mock.calls[0]?.[1];
+    expect(rows).toContainEqual([
+      "テンプレートのドキュメントID",
+      "https://docs.google.com/document/d/1AbCdEfGhIjKlMnOpQrStUvWxYz012345/edit",
+      expect.any(String),
+    ]);
+    expect(rows).toContainEqual([
+      "件名テンプレート",
+      "【御見積書】{{件名}}（{{会社名}} 様）",
+      expect.any(String),
+    ]);
+    expect(deps.forms.installSubmitTrigger).toHaveBeenCalledWith(
+      "onFormSubmit",
+      "https://docs.google.com/forms/d/form-id/edit",
+    );
+    expect(alerts[0]?.title).toBe("サンプルを作成しました");
+    expect(alerts[0]?.message).toContain("「見積書サンプル」フォルダ");
+  });
+
+  it("refuses when a form is already linked", () => {
+    const { deps, alerts } = setup({ linked: true });
+    runCreateSample(deps, "application");
+    expect(deps.samples.build).not.toHaveBeenCalled();
+    expect(alerts[0]?.message).toContain("フォームのリンクを解除");
+  });
+
+  it("warns that existing settings will be overwritten, and stops when cancelled", () => {
+    const { deps } = setup({
+      linked: false,
+      settingsRows: [
+        ["項目", "値"],
+        ["件名テンプレート", "既存の件名"],
+      ],
+    });
+    deps.ui.confirm = vi.fn(() => false);
+
+    runCreateSample(deps, "certificate");
+
+    expect(vi.mocked(deps.ui.confirm).mock.calls[0]?.[1]).toContain("今の設定は上書きされます");
+    expect(deps.samples.build).not.toHaveBeenCalled();
+    expect(deps.sheets.writeSheet).not.toHaveBeenCalled();
+  });
+
+  it("reports a build failure without touching the settings", () => {
+    const { deps, alerts } = setup({ linked: false });
+    deps.samples.build = () => {
+      throw new Error("Drive の容量が不足しています");
+    };
+    runCreateSample(deps, "estimate");
+    expect(deps.sheets.writeSheet).not.toHaveBeenCalled();
+    expect(alerts[0]).toEqual({
+      title: "サンプルを作成できませんでした",
+      message: "Drive の容量が不足しています",
+    });
   });
 });

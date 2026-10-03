@@ -10,11 +10,13 @@ import { createGasFormService, toLocalDateTime, toResponseData } from "./adapter
 import { createGasLogSheet } from "./adapters/log-sheet";
 import { createGasMailer } from "./adapters/mail";
 import { createGasStateStore } from "./adapters/properties";
+import { createGasSampleBuilder } from "./adapters/sample-builder";
 import { createGasSheets } from "./adapters/spreadsheet";
 import { createGasUi, tryGetSpreadsheetUi } from "./adapters/ui";
 import {
   type ActionDeps,
   FORM_SUBMIT_HANDLER,
+  runCreateSample,
   runRetryFailed,
   runSetup,
   runTestSend,
@@ -37,7 +39,27 @@ function onOpen(): void {
     .addItem("初期設定", "menuSetup")
     .addItem("テスト送信", "menuTestSend")
     .addItem("失敗分を再送", "menuRetryFailed")
+    .addSeparator()
+    .addSubMenu(
+      ui
+        .createMenu("サンプルを作成")
+        .addItem("見積書（社内用）", "menuSampleEstimate")
+        .addItem("申込控え（講座の申し込み）", "menuSampleApplication")
+        .addItem("受講証明書（社内用）", "menuSampleCertificate"),
+    )
     .addToUi();
+}
+
+function menuSampleEstimate(): void {
+  runCreateSample(createActionDeps(), "estimate");
+}
+
+function menuSampleApplication(): void {
+  runCreateSample(createActionDeps(), "application");
+}
+
+function menuSampleCertificate(): void {
+  runCreateSample(createActionDeps(), "certificate");
 }
 
 function menuSetup(): void {
@@ -93,6 +115,7 @@ function createActionDeps(): ActionDeps {
     log: createGasLogSheet(),
     sheets: createGasSheets(),
     forms: createGasFormService(),
+    samples: createGasSampleBuilder(),
     ui: createGasUi(),
   };
 }
@@ -102,6 +125,9 @@ export const gasEntries = {
   menuSetup,
   menuTestSend,
   menuRetryFailed,
+  menuSampleEstimate,
+  menuSampleApplication,
+  menuSampleCertificate,
   onFormSubmit,
   healthCheck,
   setupFormTrigger,
