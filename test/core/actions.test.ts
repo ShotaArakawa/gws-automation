@@ -149,7 +149,8 @@ describe("runTestSend", () => {
     );
     expect(appended).toEqual([]);
     expect(alerts[0]?.title).toBe("テスト送信しました");
-    expect(alerts[0]?.message).toContain("テスト_見積書_山田 太郎.pdf");
+    expect(alerts[0]?.message).not.toContain("me@example.com");
+    expect(alerts[0]?.message).not.toContain("山田");
   });
 
   it("asks for a response when the form has none", () => {

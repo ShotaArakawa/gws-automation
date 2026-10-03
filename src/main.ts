@@ -11,7 +11,7 @@ import { createGasLogSheet } from "./adapters/log-sheet";
 import { createGasMailer } from "./adapters/mail";
 import { createGasStateStore } from "./adapters/properties";
 import { createGasSheets } from "./adapters/spreadsheet";
-import { createGasUi } from "./adapters/ui";
+import { createGasUi, tryGetSpreadsheetUi } from "./adapters/ui";
 import {
   type ActionDeps,
   FORM_SUBMIT_HANDLER,
@@ -26,8 +26,14 @@ export const MENU_TITLE = "書類の自動送信";
 
 /** Simple trigger: adds the custom menu when the spreadsheet is opened. */
 function onOpen(): void {
-  SpreadsheetApp.getUi()
-    .createMenu(MENU_TITLE)
+  const ui = tryGetSpreadsheetUi();
+  if (ui === undefined) {
+    console.log(
+      "onOpen はスプレッドシートを開いたときに自動で実行され、メニューを追加します。エディタから初期設定をする場合は menuSetup を実行してください",
+    );
+    return;
+  }
+  ui.createMenu(MENU_TITLE)
     .addItem("初期設定", "menuSetup")
     .addItem("テスト送信", "menuTestSend")
     .addItem("失敗分を再送", "menuRetryFailed")
